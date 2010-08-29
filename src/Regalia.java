@@ -36,245 +36,269 @@ import org.rsbot.script.wrappers.RSTile;
 				"</style>" +
 				"</head>" +
 				"<body>" +
-				"<p>Regalia by Allometry</p>" +
-				"<p>Makes gold rings!</p>" +
+				"<p style=\"text-align: center;\">Regalia<br /><small>Edgeville Gold Ring Crafting by Allometry</small></p>" +
+				"<p>Options</p>" +
+                "<p>Halt script after <input type=\"text\" name=\"nRings\" value=\"-1\" style=\"width: 48px;\" /> ring(s) have been crafted (Default -1).</p>" +
 				"</body>" +
 				"</html>")
 public class Regalia extends Script implements PaintListener {
 	private boolean isCameraRotating = false, isScriptLoaded = false, isThreadsRunning = true, isVerbose = false;
-	
+
 	private int boothID = 26972, goldBarID = 2357, goldRingID = 1635, ringMouldID = 1592;
 	private int craftFurnaceParentInterfaceID = 446, craftFurnaceChildInterfaceID = 82;
 	private int levelGainedParentInterfaceID = 740, levelGainedChildInterfaceID = 3;
-	private int currentCraftingEP = 0, currentCraftingLevel = 0, lastEPTick = 0, startingCraftingEP = 0, startingCraftingLevel = 0;
-	private int ringsMadeWidgetIndex, grossProdcutWidgetIndex, currentRuntimeWidgetIndex, craftingEPEarnedWidgetIndex, ringsToGoWidgetIndex;
-	private int accumulatedRings = 0, goldRingMarketPrice = 0;
-	
+	private int currentCraftingEP = 0, currentCraftingLevel = 0, startingCraftingEP = 0, startingCraftingLevel = 0;
+	private int ringsMadeWidgetIndex, grossProdcutWidgetIndex, currentRuntimeWidgetIndex, craftingEPEarnedWidgetIndex, ringsToLevelWidgetIndex, ringsToGoWidgetIndex;
+	private int accumulatedRings = 0, goldRingMarketPrice = 0, nRingsStop = -1;
+
 	private long startingTime = 0;
-	
-	private Image coinsImage, cursorImage, ringImage, ringGoImage, sumImage, timeImage;
+
+	private Image coinsImage, cursorImage, ringImage, ringGoImage, stopImage, sumImage, timeImage;
 	private ImageObserver observer;
-	
+
 	private Monitor monitor = new Monitor();
-	
+
 	private NumberFormat numberFormatter = NumberFormat.getNumberInstance(Locale.US);
-	
+
 	private RSArea bankArea = new RSArea(new RSTile(3095, 3496), new RSTile(3098,3498));
 	private RSArea furnaceArea = new RSArea(new RSTile(3108, 3500), new RSTile(3110, 3502));
 	private RSTile furnaceTile = new RSTile(3110, 3502);
-	
+
 	private Scoreboard topLeftScoreboard, topRightScoreboard;
-	
+
 	private ScoreboardWidget ringsMade, grossProduct;
-	private ScoreboardWidget currentRuntime, craftingEPEarned, ringsToGo;
-	
-	private String craftingEPEarnedWidgetText = "", ringsToGoWidgetText = "";
-	
+	private ScoreboardWidget currentRuntime, craftingEPEarned, ringsToLevel, ringsToGo;
+
+	private String craftingEPEarnedWidgetText = "", ringsToLevelWidgetText = "", ringsToGoWidgetText="";
+
 	private Thread monitorThread;
-	
+
 	@Override
 	public boolean onStart(Map<String,String> args) {
 		try {
+			nRingsStop = Integer.parseInt(args.get("nRings"));
+		} catch(Exception e) {
+			nRingsStop = -1;
+		}
+		
+		try {
 			verbose("Attempting to read image resources from the web...");
-			
+
 			coinsImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/coins.png"));
 			cursorImage = ImageIO.read(new URL("http://scripts.allometry.com/app/webroot/img/cursors/cursor-01.png"));
 			ringImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/ring.png"));
 			ringGoImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/ring_go.png"));
+			stopImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/stop.png"));
 			sumImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/sum.png"));
 			timeImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/time.png"));
-			
+
 			verbose("Success! All image resources have been loaded...");
 		} catch (IOException e) {
 			log.warning("There was an issue trying to read the image resources from the web...");
 		}
-		
+
 		try {
 			verbose("Attempting to get the latest market prices...");
-			
+
 			GEItemInfo goldRingItem = grandExchange.loadItemInfo(goldRingID);
-			
+
 			goldRingMarketPrice = goldRingItem.getMarketPrice();
-			
+
 			verbose("Success! The gold ring is " + goldRingMarketPrice + "gp");
 		} catch (Exception e) {
 			log.warning("There was an issue trying to read the market prices from the web...");
 		}
-		
+
 		try {
 			//Assemble Top Left Widgets
 			ringsMade = new ScoreboardWidget(ringImage, "");
 			grossProduct = new ScoreboardWidget(coinsImage, "");
-			
-			//Assemble Top Right Widgets 
+
+			//Assemble Top Right Widgets
 			currentRuntime = new ScoreboardWidget(timeImage, "");
 			craftingEPEarned = new ScoreboardWidget(sumImage, "");
-			ringsToGo = new ScoreboardWidget(ringGoImage, "");
-			
+			ringsToLevel = new ScoreboardWidget(ringGoImage, "");
+			ringsToGo = new ScoreboardWidget(stopImage, "");
+
 			//Assemble Top Left Scoreboard
 			topLeftScoreboard = new Scoreboard(Scoreboard.TOP_LEFT, 128, 5);
 			topLeftScoreboard.addWidget(ringsMade);
 			ringsMadeWidgetIndex = 0;
-			
+
 			topLeftScoreboard.addWidget(grossProduct);
 			grossProdcutWidgetIndex = 1;
-			
+
 			//Assemble Top Right Scoreboard
 			topRightScoreboard = new Scoreboard(Scoreboard.TOP_RIGHT, 128, 5);
 			topRightScoreboard.addWidget(currentRuntime);
 			currentRuntimeWidgetIndex = 0;
-			
+
 			topRightScoreboard.addWidget(craftingEPEarned);
 			craftingEPEarnedWidgetIndex = 1;
+
+			topRightScoreboard.addWidget(ringsToLevel);
+			ringsToLevelWidgetIndex = 2;
 			
-			topRightScoreboard.addWidget(ringsToGo);
-			ringsToGoWidgetIndex = 2;
-			
+			if(nRingsStop > 0) {
+				topRightScoreboard.addWidget(ringsToGo);
+				ringsToGoWidgetIndex = 3;
+			}
 		} catch (Exception e) {
 			log.warning("There was an issue creating the scoreboard...");
 		}
-		
+
 		startingCraftingEP = skills.getCurrentSkillExp(Skills.getStatIndex("Crafting"));
 		startingCraftingLevel = skills.getCurrSkillLevel(Skills.getStatIndex("Crafting"));
 		startingTime = System.currentTimeMillis();
-		
+
 		monitorThread = new Thread(monitor);
 		monitorThread.start();
-		
+
 		isScriptLoaded = true;
 		setCameraAltitude(true);
-		
+
 		return true;
 	}
-	
+
 	@Override
 	public int loop() {
 		if(isPaused || isCameraRotating || !isLoggedIn() || isWelcomeScreen() || isLoginScreen()) return 1;
-		
-		if(inventoryContains(ringMouldID, goldBarID)) {
-			if(!tileOnScreen(furnaceTile)) {
-				if(!getMyPlayer().isMoving()) {
-					walkTileMM(furnaceArea.getRandomTile());
-					return random(700, 1000);
-				}
-			} else {
-				if(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid()) {
-					RSObject furnace = getObjectAt(furnaceTile);
-					do {
-						useItem(getInventoryItemByID(goldBarID), furnace);
-						
-						if(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid())
-							wait(random(1500, 2000));
-					} while(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid());
+		if(accumulatedRings >= nRingsStop) return (1/0);
+
+		try {
+			if(inventoryContains(ringMouldID, goldBarID)) {
+				if(!tileOnScreen(furnaceTile)) {
+					if(!getMyPlayer().isMoving()) {
+						walkTileMM(furnaceArea.getRandomTile());
+						return random(700, 1000);
+					}
 				} else {
-					if(atInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID, "Make All")) {
-						while(inventoryContains(goldBarID)) {
-							if(getInterface(levelGainedParentInterfaceID, levelGainedChildInterfaceID).isValid())
-								atInterface(levelGainedParentInterfaceID, levelGainedChildInterfaceID, "");
-							
-							if(inventoryContains(goldBarID))
-								wait(100);
+					if(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid()) {
+						RSObject furnace = getObjectAt(furnaceTile);
+						do {
+							useItem(getInventoryItemByID(goldBarID), furnace);
+
+							if(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid())
+								wait(random(1500, 2000));
+						} while(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid());
+					} else {
+						if(atInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID, "Make All")) {
+							while(inventoryContains(goldBarID)) {
+								if(accumulatedRings >= nRingsStop) return 1;
+								
+								if(getInterface(levelGainedParentInterfaceID, levelGainedChildInterfaceID).isValid())
+									atInterface(levelGainedParentInterfaceID, levelGainedChildInterfaceID, "");
+
+								if(inventoryContains(goldBarID))
+									wait(100);
+							}
 						}
 					}
 				}
-			}
-		} else if(inventoryContains(ringMouldID, goldRingID) && !inventoryContains(goldBarID)) {
-			if(!bankArea.contains(getMyPlayer().getLocation()) || getNearestObjectByID(boothID) == null) {
-				if(!getMyPlayer().isMoving()) {
-					walkTileMM(bankArea.getRandomTile());
-					return random(700, 1000);
+			} else if(inventoryContains(ringMouldID, goldRingID) && !inventoryContains(goldBarID)) {
+				if(!bankArea.contains(getMyPlayer().getLocation()) || getNearestObjectByID(boothID) == null) {
+					if(!getMyPlayer().isMoving()) {
+						walkTileMM(bankArea.getRandomTile());
+						return random(700, 1000);
+					}
+				} else {
+					if(!bank.isOpen()) {
+						if(getNearestObjectByID(boothID) != null) {
+							if(!bank.isOpen()) {
+								atObject(getNearestObjectByID(boothID), "Use-quickly");
+								return random(1500, 2000);
+							}
+						}
+					}
+
+					if(bank.depositAllExcept(ringMouldID))
+						return 1;
 				}
-			} else {
+			} else if(inventoryEmptyExcept(ringMouldID)) {
 				if(!bank.isOpen()) {
 					if(getNearestObjectByID(boothID) != null) {
 						if(!bank.isOpen()) {
 							atObject(getNearestObjectByID(boothID), "Use-quickly");
 							return random(1500, 2000);
-						}							
+						}
 					}
 				}
-				
-				if(bank.depositAllExcept(ringMouldID))
+
+				if(bank.withdraw(goldBarID, 0))
 					return 1;
 			}
-		} else if(inventoryEmptyExcept(ringMouldID)) {
-			if(!bank.isOpen()) {
-				if(getNearestObjectByID(boothID) != null) {
-					if(!bank.isOpen()) {
-						atObject(getNearestObjectByID(boothID), "Use-quickly");
-						return random(1500, 2000);
-					}							
-				}
-			}
-			
-			if(bank.withdraw(goldBarID, 0))
-				return 1;
+		} catch(Exception e) {
+
 		}
-		
+
 		return 1;
 	}
-	
+
 	@Override
 	public void onRepaint(Graphics g2) {
 		if(isPaused || !isLoggedIn()) return ;
-		
+
 		Graphics2D g = (Graphics2D)g2;
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-		
+
 		if(!isScriptLoaded) {
 			Scoreboard loadingBoard = new Scoreboard(Scoreboard.BOTTOM_RIGHT, 128, 5);
 			loadingBoard.addWidget(new ScoreboardWidget(timeImage, "Loading..."));
 			loadingBoard.drawScoreboard(g);
-			
+
 			return ;
 		}
-		
+
 		//Draw Custom Mouse Cursor
 		g.drawImage(cursorImage, getMouseLocation().x - 16, getMouseLocation().y - 16, observer);
-		
+
 		//Draw Top Left Scoreboard
 		topLeftScoreboard.getWidget(ringsMadeWidgetIndex).setWidgetText(numberFormatter.format(accumulatedRings));
 		topLeftScoreboard.getWidget(grossProdcutWidgetIndex).setWidgetText("$" + numberFormatter.format(accumulatedRings * goldRingMarketPrice));
 		topLeftScoreboard.drawScoreboard(g);
-		
+
 		//Draw Top Right Scoreboard
 		topRightScoreboard.getWidget(currentRuntimeWidgetIndex).setWidgetText(millisToClock(System.currentTimeMillis() - startingTime));
 		topRightScoreboard.getWidget(craftingEPEarnedWidgetIndex).setWidgetText(craftingEPEarnedWidgetText);
-		topRightScoreboard.getWidget(ringsToGoWidgetIndex).setWidgetText(ringsToGoWidgetText);
+		topRightScoreboard.getWidget(ringsToLevelWidgetIndex).setWidgetText(ringsToLevelWidgetText);
+		
+		if(nRingsStop > 0)
+			topRightScoreboard.getWidget(ringsToGoWidgetIndex).setWidgetText(ringsToGoWidgetText);
+		
 		topRightScoreboard.drawScoreboard(g);
 	}
-	
+
 	@Override
 	public void onFinish() {
 		verbose("Stopping threads...");
-		
+
 		//Gracefully stop threads
 		while(monitorThread.isAlive()) {
 			isThreadsRunning = false;
 		}
-		
+
 		verbose("Threads stopped...");
-		
+
 		//Gracefully release threads and runnable objects
 		monitorThread = null;
 		monitor = null;
-				
+
 		return ;
 	}
-	
+
 	/**
 	 * Verbose method is a log wrapper that successfully executes if the ifVerbose variable is true.
-	 * 
+	 *
 	 * @since 0.1
 	 */
 	private void verbose(String message) {
 		if(isVerbose) log.info(message);
 	}
-	
+
 	/**
 	 * Formats millisecond time into HH:MM:SS
-	 * 
+	 *
 	 * @param milliseconds				milliseconds that should be converted into
 	 * 									the HH:MM:SS format
 	 * 									@see java.lang.System
@@ -283,26 +307,26 @@ public class Regalia extends Script implements PaintListener {
 	 */
 	private String millisToClock(long milliseconds) {
 		long seconds = (milliseconds / 1000), minutes = 0, hours = 0;
-		
+
 		if (seconds >= 60) {
 			minutes = (seconds / 60);
 			seconds -= (minutes * 60);
 		}
-		
+
 		if (minutes >= 60) {
 			hours = (minutes / 60);
 			minutes -= (hours * 60);
 		}
-		
+
 		return (hours < 10 ? "0" + hours + ":" : hours + ":")
 				+ (minutes < 10 ? "0" + minutes + ":" : minutes + ":")
 				+ (seconds < 10 ? "0" + seconds : seconds);
 	}
-	
+
 	/**
 	 * Monitor class assembles and updates all experience points and levels gained. The
 	 * class also maintains strings for the onRepaint method.
-	 * 
+	 *
 	 * @author allometry
 	 * @version 1.1
 	 * @since 1.0
@@ -314,24 +338,25 @@ public class Regalia extends Script implements PaintListener {
 				while(isLoggedIn() && !isPaused && isThreadsRunning) {
 					currentCraftingEP = skills.getCurrentSkillExp(Skills.getStatIndex("Crafting"));
 					currentCraftingLevel = skills.getCurrSkillLevel(Skills.getStatIndex("Crafting"));
-					
+
 					accumulatedRings = (currentCraftingEP - startingCraftingEP) / 15;
-						
+
 					if(currentCraftingLevel > startingCraftingLevel)
 						craftingEPEarnedWidgetText = numberFormatter.format((currentCraftingEP - startingCraftingEP)) + " (+" + (currentCraftingLevel - startingCraftingLevel) + ")";
 					else
 						craftingEPEarnedWidgetText = numberFormatter.format((currentCraftingEP - startingCraftingEP));
-					
-					ringsToGoWidgetText = numberFormatter.format(Math.ceil(skills.getXPToNextLevel(Skills.getStatIndex("Crafting")) / 15));
+
+					ringsToLevelWidgetText = numberFormatter.format(Math.ceil(skills.getXPToNextLevel(Skills.getStatIndex("Crafting")) / 15));
+					ringsToGoWidgetText = "[" + numberFormatter.format(nRingsStop) + "] " + numberFormatter.format(nRingsStop - accumulatedRings);
 				}
 			}
 		}
 	}
-	
+
 	/**
 	 * Scoreboard is a class for assembling individual scoreboards with widgets
 	 * in a canvas space.
-	 * 
+	 *
 	 * @author allometry
 	 * @version 1.0
 	 * @since 1.0
@@ -346,10 +371,10 @@ public class Regalia extends Script implements PaintListener {
 				scoreboardHeight, scoreboardArc;
 
 		private ArrayList<ScoreboardWidget> widgets = new ArrayList<ScoreboardWidget>();
-		
+
 		/**
 		 * Creates a new instance of Scoreboard.
-		 * 
+		 *
 		 * @param scoreboardLocation	the location of where the scoreboard should be drawn on the screen
 		 * 								@see Scoreboard.TOP_LEFT
 		 * 								@see Scoreboard.TOP_RIGHT
@@ -385,10 +410,10 @@ public class Regalia extends Script implements PaintListener {
 				break;
 			}
 		}
-		
+
 		/**
 		 * Adds a ScoreboardWidget to the Scoreboard.
-		 * 
+		 *
 		 * @param widget				an instance of a ScoreboardWidget containing an image
 		 * 								and text
 		 * 								@see ScoreboardWidget
@@ -398,10 +423,10 @@ public class Regalia extends Script implements PaintListener {
 		public boolean addWidget(ScoreboardWidget widget) {
 			return widgets.add(widget);
 		}
-		
+
 		/**
 		 * Gets a ScoreboardWidget by it's index within Scoreboard.
-		 * 
+		 *
 		 * @param widgetIndex			the index of the ScoreboardWidget
 		 * @return						an instance of ScoreboardWidget
 		 * @since 1.0
@@ -414,19 +439,19 @@ public class Regalia extends Script implements PaintListener {
 				return null;
 			}
 		}
-		
+
 		/**
 		 * Gets the Scoreboard widgets.
-		 * 
+		 *
 		 * @return						an ArrayList filled with ScoreboardWidget's
 		 */
 		public ArrayList<ScoreboardWidget> getWidgets() {
 			return widgets;
 		}
-		
+
 		/**
 		 * Draws the Scoreboard and ScoreboardWidget's to an instances of Graphics2D.
-		 * 
+		 *
 		 * @param g						an instance of Graphics2D
 		 * @return						true if Scoreboard was able to draw to the Graphics2D instance and false if it wasn't
 		 * @since 1.0
@@ -462,22 +487,22 @@ public class Regalia extends Script implements PaintListener {
 				return false;
 			}
 		}
-		
+
 		/**
 		 * Returns the height of the Scoreboard with respect to it's contained ScoreboardWidget's.
-		 * 
+		 *
 		 * @return						the pixel height of the Scoreboard
-		 * @since 1.0 
+		 * @since 1.0
 		 */
 		public int getHeight() {
 			return scoreboardHeight;
 		}
 	}
-	
+
 	/**
 	 * ScoreboardWidget is a container intended for use with a Scoreboard. Scoreboards contain
 	 * an image and text, which are later drawn to an instance of Graphics2D.
-	 * 
+	 *
 	 * @author allometry
 	 * @version 1.0
 	 * @since 1.0
@@ -487,10 +512,10 @@ public class Regalia extends Script implements PaintListener {
 		private ImageObserver observer = null;
 		private Image widgetImage;
 		private String widgetText;
-		
+
 		/**
 		 * Creates a new instance of ScoreboardWidget.
-		 * 
+		 *
 		 * @param widgetImage			an instance of an Image. Recommended size is 16x16 pixels
 		 * 								@see java.awt.Image
 		 * @param widgetText			text to be shown on the right of the widgetImage
@@ -500,10 +525,10 @@ public class Regalia extends Script implements PaintListener {
 			this.widgetImage = widgetImage;
 			this.widgetText = widgetText;
 		}
-		
+
 		/**
 		 * Gets the widget image.
-		 * 
+		 *
 		 * @return						the Image of ScoreboardWidget
 		 * 								@see java.awt.Image
 		 * @since 1.0
@@ -511,10 +536,10 @@ public class Regalia extends Script implements PaintListener {
 		public Image getWidgetImage() {
 			return widgetImage;
 		}
-		
+
 		/**
 		 * Sets the widget image.
-		 * 
+		 *
 		 * @param widgetImage			an instance of an Image. Recommended size is 16x16 pixels
 		 * 								@see java.awt.Image
 		 * @since 1.0
@@ -522,32 +547,32 @@ public class Regalia extends Script implements PaintListener {
 		public void setWidgetImage(Image widgetImage) {
 			this.widgetImage = widgetImage;
 		}
-		
+
 		/**
 		 * Gets the widget text.
-		 * 
+		 *
 		 * @return						the text of ScoreboardWidget
 		 * @since 1.0
 		 */
 		public String getWidgetText() {
 			return widgetText;
 		}
-		
+
 		/**
 		 * Sets the widget text.
-		 * 
+		 *
 		 * @param widgetText			text to be shown on the right of the widgetImage
 		 * @since 1.0
 		 */
 		public void setWidgetText(String widgetText) {
 			this.widgetText = widgetText;
 		}
-		
+
 		/**
 		 * Draws the ScoreboardWidget to an instance of Graphics2D.
-		 * 
+		 *
 		 * @param g						an instance of Graphics2D
-		 * @param x						horizontal pixel location of where to draw the widget 
+		 * @param x						horizontal pixel location of where to draw the widget
 		 * @param y						vertical pixel location of where to draw the widget
 		 * @since 1.0
 		 */
