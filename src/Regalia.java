@@ -4,16 +4,28 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.ImageObserver;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLConnection;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Formatter;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 import javax.imageio.ImageIO;
+import javax.swing.Timer;
 
 import org.rsbot.event.listeners.PaintListener;
 import org.rsbot.script.GEItemInfo;
@@ -23,6 +35,12 @@ import org.rsbot.script.Skills;
 import org.rsbot.script.wrappers.RSArea;
 import org.rsbot.script.wrappers.RSObject;
 import org.rsbot.script.wrappers.RSTile;
+import org.xml.sax.Attributes;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.XMLReader;
+import org.xml.sax.helpers.DefaultHandler;
+import org.xml.sax.helpers.XMLReaderFactory;
 
 @ScriptManifest(authors = { "Allometry" }, category = "Crafting", name = "Regalia", version = 0.1,
 		description = "" +
@@ -74,7 +92,7 @@ public class Regalia extends Script implements PaintListener {
 	private Thread monitorThread;
 
 	@Override
-	public boolean onStart(Map<String,String> args) {
+	public boolean onStart(Map<String,String> args) {		
 		try {
 			nRingsStop = Integer.parseInt(args.get("nRings"));
 		} catch(Exception e) {
@@ -582,6 +600,134 @@ public class Regalia extends Script implements PaintListener {
 
 			g.drawImage(widgetImage, x, y, observer);
 			g.drawString(widgetText, x + widgetImage.getWidth(observer) + 4, y + 12);
+		}
+	}
+	
+	/**
+	 * Rune Leaf
+	 * Usage and Statistics Class for Rune Leaf Social Gaming
+	 * 
+	 * @author allometry
+	 * @version 0.1
+	 */
+	public class RuneLeaf {	
+		private ActionListener heartbeat = new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				try {
+					URLConnection connection = heartbeatLocation.openConnection();
+				} catch (IOException h) {
+					log.warning("RuneLeaf [heartbeat][" + h.getCause() + "]: " + h.getLocalizedMessage());
+				}
+				
+			}
+		};
+		
+		private String key = "";
+		private String token = "";
+		private String uuid = "4c7e6d32-3770-4bf5-8ae3-4a4f0a0a0302";
+		
+		private Timer tick = new Timer(60000, heartbeat);
+		
+		private URL handshakeXMLLocation;
+		private URL heartbeatLocation;
+		private XMLReader handshakeXMLReader;
+		
+		public RuneLeaf() {
+			try {
+				MessageDigest shaDigest = MessageDigest.getInstance("SHA-256");
+				byte[] keyBytes = shaDigest.digest(getAccountName().getBytes("UTF-8"));
+				key = byteArray2Hex(keyBytes);
+				
+			} catch (UnsupportedEncodingException e) {
+				log.warning("RuneLeaf [encryption][" + e.getCause() + "]: " + e.getLocalizedMessage());
+			} catch (NoSuchAlgorithmException e) {
+				log.warning("RuneLeaf [encryption][" + e.getCause() + "]: " + e.getLocalizedMessage());
+			}
+			
+			try {
+				handshakeXMLLocation = new URL("http://rsdb.allometry.com/runeleaf/handshake/" + uuid + "/" + key);
+				heartbeatLocation = new URL("http://rsdb.allometry.com/runeleaf/heartbeat/" + uuid + "/" + token);
+			} catch (MalformedURLException e) {
+				log.warning("RuneLeaf [handshake][" + e.getCause() + "]: " + e.getLocalizedMessage());
+			}
+			
+			try {
+				initializeHandshake();
+				tick.start();
+			} catch (SAXException e) {
+				log.warning("RuneLeaf [handshake][" + e.getCause() + "]: " + e.getLocalizedMessage());
+			} catch (IOException e) {
+				log.warning("RuneLeaf [handshake][" + e.getCause() + "]: " + e.getLocalizedMessage());
+			} catch (Exception e) {
+				log.warning("RuneLeaf [handshake][" + e.getCause() + "]: " + e.getLocalizedMessage());
+			}
+		}
+		
+		private void initializeHandshake() throws SAXException, IOException, Exception {
+			RuneLeafHandshake handshake = new RuneLeafHandshake();
+			
+			handshakeXMLReader = XMLReaderFactory.createXMLReader();
+			handshakeXMLReader.setContentHandler(handshake);
+			handshakeXMLReader.setErrorHandler(handshake);
+			handshakeXMLReader.parse(new InputSource(new InputStreamReader(handshakeXMLLocation.openStream())));
+
+			if(uuid.equalsIgnoreCase("false")) throw new Exception("UUID not recognized", new Throwable("Bad UUID"));
+			
+			token = handshake.getToken();
+			uuid = handshake.getUuid();			
+		}
+		
+		private String byteArray2Hex(byte[] hash) {
+	        Formatter formatter = new Formatter();
+	        for (byte b : hash) formatter.format("%02x", b);
+	        return formatter.toString();
+	    }
+		
+		private class RuneLeafHandshake extends DefaultHandler {
+			private String currentElement = "";
+			private String token = "";
+			private String uuid = "";
+			
+			public RuneLeafHandshake() {
+				super();
+			}
+			
+			public void startElement(String uri, String name, String qName, Attributes atts) {
+				if(!name.equalsIgnoreCase("session")) currentElement = name;
+			}
+
+			public void characters(char chars[], int start, int length) {
+				String elementValue = new String(chars, start, length).trim();
+				if(elementValue.trim().equals("")) return ;
+
+				if(currentElement.equalsIgnoreCase("token"))
+					setToken(elementValue);
+				else if(currentElement.equalsIgnoreCase("uuid"))
+					setUuid(elementValue);
+			}
+
+			public void endElement(String uri, String name, String qName) {
+				if(name.equalsIgnoreCase("session")) {
+					currentElement = "";
+				}
+			}
+
+			public void setToken(String token) {
+				this.token = token;
+			}
+
+			public String getToken() {
+				return token;
+			}
+
+			public void setUuid(String uuid) {
+				this.uuid = uuid;
+			}
+
+			public String getUuid() {
+				return uuid;
+			}
 		}
 	}
 }
