@@ -8,13 +8,11 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.ImageObserver;
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.NumberFormat;
@@ -22,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Formatter;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 
 import javax.imageio.ImageIO;
 import javax.swing.Timer;
@@ -57,17 +54,21 @@ import org.xml.sax.helpers.XMLReaderFactory;
 				"<p style=\"text-align: center;\">Regalia<br /><small>Edgeville Gold Ring Crafting by Allometry</small></p>" +
 				"<p>Options</p>" +
                 "<p>Halt script after <input type=\"text\" name=\"nRings\" value=\"-1\" style=\"width: 48px;\" /> ring(s) have been crafted (Default -1).</p>" +
+                "<p><select name=\"jewelery\"><option value=\"ring\">Ring</option><option value=\"bracelet\">Bracelet</option></p>" +
 				"</body>" +
 				"</html>")
 public class Regalia extends Script implements PaintListener {
 	private boolean isCameraRotating = false, isScriptLoaded = false, isThreadsRunning = true, isVerbose = false;
 
-	private int boothID = 26972, goldBarID = 2357, goldRingID = 1635, ringMouldID = 1592;
-	private int craftFurnaceParentInterfaceID = 446, craftFurnaceChildInterfaceID = 82;
+	private int boothID = 26972, goldBarID = 2357, goldRingID = 1635, ringMouldID = 1592, goldBraceletID = 11069, braceletMouldID = 11065;
+	private int craftFurnaceParentInterfaceID = 446, craftFurnaceGoldRingChildInterfaceID = 82, craftFurnaceGoldBraceletChildInterfaceID = 33;
 	private int levelGainedParentInterfaceID = 740, levelGainedChildInterfaceID = 3;
 	private int currentCraftingEP = 0, currentCraftingLevel = 0, startingCraftingEP = 0, startingCraftingLevel = 0;
 	private int ringsMadeWidgetIndex, grossProdcutWidgetIndex, currentRuntimeWidgetIndex, craftingEPEarnedWidgetIndex, ringsToLevelWidgetIndex, ringsToGoWidgetIndex;
 	private int accumulatedRings = 0, goldRingMarketPrice = 0, nRingsStop = -1;
+	
+	private int selectedJeweleryID, selectedMouldID, selectedJeweleryXP, selectedChildInterfaceID;
+	private int goldRingXP = 15, goldBraceletXP = 25;
 
 	private long startingTime = 0;
 
@@ -99,6 +100,18 @@ public class Regalia extends Script implements PaintListener {
 			nRingsStop = -1;
 		}
 		
+		if(args.get("jewelery").equalsIgnoreCase("ring")) {
+			selectedJeweleryID = goldRingID;
+			selectedMouldID = ringMouldID;
+			selectedJeweleryXP = goldRingXP;
+			selectedChildInterfaceID = craftFurnaceGoldRingChildInterfaceID;
+		} else {
+			selectedJeweleryID = goldBraceletID;
+			selectedMouldID = braceletMouldID;
+			selectedJeweleryXP = goldBraceletXP;
+			selectedChildInterfaceID = craftFurnaceGoldBraceletChildInterfaceID;
+		}
+		
 		try {
 			verbose("Attempting to read image resources from the web...");
 
@@ -118,11 +131,11 @@ public class Regalia extends Script implements PaintListener {
 		try {
 			verbose("Attempting to get the latest market prices...");
 
-			GEItemInfo goldRingItem = grandExchange.loadItemInfo(goldRingID);
+			GEItemInfo goldRingItem = grandExchange.loadItemInfo(selectedJeweleryID);
 
 			goldRingMarketPrice = goldRingItem.getMarketPrice();
 
-			verbose("Success! The gold ring is " + goldRingMarketPrice + "gp");
+			verbose("Success! The jewlery is worth " + goldRingMarketPrice + "gp");
 		} catch (Exception e) {
 			log.warning("There was an issue trying to read the market prices from the web...");
 		}
@@ -181,28 +194,28 @@ public class Regalia extends Script implements PaintListener {
 	@Override
 	public int loop() {
 		if(isPaused || isCameraRotating || !isLoggedIn() || isWelcomeScreen() || isLoginScreen()) return 1;
-		if(accumulatedRings >= nRingsStop) return (1/0);
+		if(accumulatedRings >= nRingsStop && nRingsStop > 0) stopScript();
 
 		try {
-			if(inventoryContains(ringMouldID, goldBarID)) {
+			if(inventoryContains(selectedMouldID, goldBarID)) {
 				if(!tileOnScreen(furnaceTile)) {
 					if(!getMyPlayer().isMoving()) {
 						walkTileMM(furnaceArea.getRandomTile());
 						return random(700, 1000);
 					}
 				} else {
-					if(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid()) {
+					if(!getInterface(craftFurnaceParentInterfaceID, selectedChildInterfaceID).isValid()) {
 						RSObject furnace = getObjectAt(furnaceTile);
 						do {
 							useItem(getInventoryItemByID(goldBarID), furnace);
 
-							if(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid())
+							if(!getInterface(craftFurnaceParentInterfaceID, selectedChildInterfaceID).isValid())
 								wait(random(1500, 2000));
-						} while(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID).isValid());
+						} while(!getInterface(craftFurnaceParentInterfaceID, craftFurnaceGoldRingChildInterfaceID).isValid());
 					} else {
-						if(atInterface(craftFurnaceParentInterfaceID, craftFurnaceChildInterfaceID, "Make All")) {
+						if(atInterface(craftFurnaceParentInterfaceID, selectedChildInterfaceID, "Make All")) {
 							while(inventoryContains(goldBarID)) {
-								if(accumulatedRings >= nRingsStop) return 1;
+								if(accumulatedRings >= nRingsStop && nRingsStop > 0) return 1;
 								
 								if(getInterface(levelGainedParentInterfaceID, levelGainedChildInterfaceID).isValid())
 									atInterface(levelGainedParentInterfaceID, levelGainedChildInterfaceID, "");
@@ -213,7 +226,7 @@ public class Regalia extends Script implements PaintListener {
 						}
 					}
 				}
-			} else if(inventoryContains(ringMouldID, goldRingID) && !inventoryContains(goldBarID)) {
+			} else if(inventoryContains(selectedMouldID, selectedJeweleryID) && !inventoryContains(goldBarID)) {
 				if(!bankArea.contains(getMyPlayer().getLocation()) || getNearestObjectByID(boothID) == null) {
 					if(!getMyPlayer().isMoving()) {
 						walkTileMM(bankArea.getRandomTile());
@@ -229,10 +242,10 @@ public class Regalia extends Script implements PaintListener {
 						}
 					}
 
-					if(bank.depositAllExcept(ringMouldID))
+					if(bank.depositAllExcept(selectedMouldID))
 						return 1;
 				}
-			} else if(inventoryEmptyExcept(ringMouldID)) {
+			} else if(inventoryEmptyExcept(selectedMouldID)) {
 				if(!bank.isOpen()) {
 					if(getNearestObjectByID(boothID) != null) {
 						if(!bank.isOpen()) {
@@ -357,14 +370,14 @@ public class Regalia extends Script implements PaintListener {
 					currentCraftingEP = skills.getCurrentSkillExp(Skills.getStatIndex("Crafting"));
 					currentCraftingLevel = skills.getCurrSkillLevel(Skills.getStatIndex("Crafting"));
 
-					accumulatedRings = (currentCraftingEP - startingCraftingEP) / 15;
+					accumulatedRings = (currentCraftingEP - startingCraftingEP) / selectedJeweleryXP;
 
 					if(currentCraftingLevel > startingCraftingLevel)
 						craftingEPEarnedWidgetText = numberFormatter.format((currentCraftingEP - startingCraftingEP)) + " (+" + (currentCraftingLevel - startingCraftingLevel) + ")";
 					else
 						craftingEPEarnedWidgetText = numberFormatter.format((currentCraftingEP - startingCraftingEP));
 
-					ringsToLevelWidgetText = numberFormatter.format(Math.ceil(skills.getXPToNextLevel(Skills.getStatIndex("Crafting")) / 15));
+					ringsToLevelWidgetText = numberFormatter.format(Math.ceil(skills.getXPToNextLevel(Skills.getStatIndex("Crafting")) / selectedJeweleryXP));
 					ringsToGoWidgetText = "[" + numberFormatter.format(nRingsStop) + "] " + numberFormatter.format(nRingsStop - accumulatedRings);
 				}
 			}
@@ -615,7 +628,7 @@ public class Regalia extends Script implements PaintListener {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				try {
-					URLConnection connection = heartbeatLocation.openConnection();
+					heartbeatLocation.openConnection();
 				} catch (IOException h) {
 					log.warning("RuneLeaf [heartbeat][" + h.getCause() + "]: " + h.getLocalizedMessage());
 				}
