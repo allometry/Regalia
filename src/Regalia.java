@@ -64,7 +64,7 @@ public class Regalia extends Script implements PaintListener {
 	private int craftFurnaceParentInterfaceID = 446, craftFurnaceGoldRingChildInterfaceID = 82, craftFurnaceGoldBraceletChildInterfaceID = 33;
 	private int levelGainedParentInterfaceID = 740, levelGainedChildInterfaceID = 3;
 	private int currentCraftingEP = 0, currentCraftingLevel = 0, startingCraftingEP = 0, startingCraftingLevel = 0;
-	private int ringsMadeWidgetIndex, grossProdcutWidgetIndex, currentRuntimeWidgetIndex, craftingEPEarnedWidgetIndex, ringsToLevelWidgetIndex, ringsToGoWidgetIndex;
+	private int ringsMadeWidgetIndex, grossProdcutWidgetIndex, currentRuntimeWidgetIndex, craftingEPEarnedWidgetIndex, craftingEPTogoWidgetIndex, ringsToLevelWidgetIndex, ringsToGoWidgetIndex;
 	private int accumulatedRings = 0, goldRingMarketPrice = 0, nRingsStop = -1;
 	
 	private int selectedJeweleryID, selectedMouldID, selectedJeweleryXP, selectedChildInterfaceID;
@@ -72,7 +72,7 @@ public class Regalia extends Script implements PaintListener {
 
 	private long startingTime = 0;
 
-	private Image coinsImage, cursorImage, ringImage, ringGoImage, stopImage, sumImage, timeImage;
+	private Image coinsImage, cursorImage, ringImage, ringGoImage, stopImage, sumImage, sumGoImage, timeImage;
 	private ImageObserver observer;
 
 	private Monitor monitor = new Monitor();
@@ -86,7 +86,7 @@ public class Regalia extends Script implements PaintListener {
 	private Scoreboard topLeftScoreboard, topRightScoreboard;
 
 	private ScoreboardWidget ringsMade, grossProduct;
-	private ScoreboardWidget currentRuntime, craftingEPEarned, ringsToLevel, ringsToGo;
+	private ScoreboardWidget currentRuntime, craftingEPEarned, ringsToLevel, ringsToGo, craftingEPTogo;
 
 	private String craftingEPEarnedWidgetText = "", ringsToLevelWidgetText = "", ringsToGoWidgetText="";
 
@@ -121,6 +121,7 @@ public class Regalia extends Script implements PaintListener {
 			ringGoImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/ring_go.png"));
 			stopImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/stop.png"));
 			sumImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/sum.png"));
+			sumGoImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/sum.png"));
 			timeImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/time.png"));
 
 			verbose("Success! All image resources have been loaded...");
@@ -150,6 +151,7 @@ public class Regalia extends Script implements PaintListener {
 			craftingEPEarned = new ScoreboardWidget(sumImage, "");
 			ringsToLevel = new ScoreboardWidget(ringGoImage, "");
 			ringsToGo = new ScoreboardWidget(stopImage, "");
+			craftingEPTogo = new ScoreboardWidget(sumGoImage, "");
 
 			//Assemble Top Left Scoreboard
 			topLeftScoreboard = new Scoreboard(Scoreboard.TOP_LEFT, 128, 5);
@@ -173,6 +175,12 @@ public class Regalia extends Script implements PaintListener {
 			if(nRingsStop > 0) {
 				topRightScoreboard.addWidget(ringsToGo);
 				ringsToGoWidgetIndex = 3;
+				
+				topRightScoreboard.addWidget(craftingEPTogo);
+				craftingEPTogoWidgetIndex = 4;
+			} else {
+				topRightScoreboard.addWidget(craftingEPTogo);
+				craftingEPTogoWidgetIndex = 3;
 			}
 		} catch (Exception e) {
 			log.warning("There was an issue creating the scoreboard...");
@@ -293,11 +301,36 @@ public class Regalia extends Script implements PaintListener {
 		topRightScoreboard.getWidget(currentRuntimeWidgetIndex).setWidgetText(millisToClock(System.currentTimeMillis() - startingTime));
 		topRightScoreboard.getWidget(craftingEPEarnedWidgetIndex).setWidgetText(craftingEPEarnedWidgetText);
 		topRightScoreboard.getWidget(ringsToLevelWidgetIndex).setWidgetText(ringsToLevelWidgetText);
+		topRightScoreboard.getWidget(craftingEPTogoWidgetIndex).setWidgetText(numberFormatter.format(skills.getXPToNextLevel(Skills.getStatIndex("Crafting"))));
 		
 		if(nRingsStop > 0)
 			topRightScoreboard.getWidget(ringsToGoWidgetIndex).setWidgetText(ringsToGoWidgetText);
 		
 		topRightScoreboard.drawScoreboard(g);
+		
+		//Draw Magic Progress Bar
+		RoundRectangle2D progressBackground = new RoundRectangle2D.Float(
+				Scoreboard.gameCanvasRight - 128,
+				topRightScoreboard.getHeight() + 30,
+				128,
+				8,
+				5,
+				5);
+		
+		Double percentToWidth = new Double(skills.getPercentToNextLevel(Skills.getStatIndex("Crafting")));
+		RoundRectangle2D progressBar = new RoundRectangle2D.Float(
+				Scoreboard.gameCanvasRight - 128,
+				topRightScoreboard.getHeight() + 31,
+				percentToWidth.intValue(),
+				7,
+				5,
+				5);
+		
+		g.setColor(new Color(0, 0, 0, 127));
+		g.draw(progressBackground);
+		
+		g.setColor(new Color(139, 69, 19, 191));
+		g.fill(progressBar);
 	}
 
 	@Override
