@@ -54,21 +54,23 @@ import org.xml.sax.helpers.XMLReaderFactory;
 				"<p style=\"text-align: center;\">Regalia<br /><small>Edgeville Gold Ring Crafting by Allometry</small></p>" +
 				"<p>Options</p>" +
                 "<p>Halt script after <input type=\"text\" name=\"nRings\" value=\"-1\" style=\"width: 48px;\" /> ring(s) have been crafted (Default -1).</p>" +
-                "<p><select name=\"jewelery\"><option value=\"ring\">Ring</option><option value=\"bracelet\">Bracelet</option></p>" +
+                "<p><select name=\"jewelery\"><option value=\"ring\">Ring</option><option value=\"bracelet\">Bracelet</option><option value=\"amulet\">Amulet</option></p>" +
 				"</body>" +
 				"</html>")
 public class Regalia extends Script implements PaintListener {
 	private boolean isCameraRotating = false, isScriptLoaded = false, isThreadsRunning = true, isVerbose = false;
 
 	private int boothID = 26972, goldBarID = 2357, goldRingID = 1635, ringMouldID = 1592, goldBraceletID = 11069, braceletMouldID = 11065;
+	private int goldAmuletID = 1673, amuletMouldID = 1595;
 	private int craftFurnaceParentInterfaceID = 446, craftFurnaceGoldRingChildInterfaceID = 82, craftFurnaceGoldBraceletChildInterfaceID = 33;
+	private int craftFurnaceGoldAmuletChildInterfaceID = 53;
 	private int levelGainedParentInterfaceID = 740, levelGainedChildInterfaceID = 3;
 	private int currentCraftingEP = 0, currentCraftingLevel = 0, startingCraftingEP = 0, startingCraftingLevel = 0;
 	private int ringsMadeWidgetIndex, grossProdcutWidgetIndex, currentRuntimeWidgetIndex, craftingEPEarnedWidgetIndex, craftingEPTogoWidgetIndex, ringsToLevelWidgetIndex, ringsToGoWidgetIndex;
 	private int accumulatedRings = 0, goldRingMarketPrice = 0, nRingsStop = -1;
 	
 	private int selectedJeweleryID, selectedMouldID, selectedJeweleryXP, selectedChildInterfaceID;
-	private int goldRingXP = 15, goldBraceletXP = 25;
+	private int goldRingXP = 15, goldBraceletXP = 25, goldAmuletXP = 30;
 
 	private long startingTime = 0;
 
@@ -105,6 +107,11 @@ public class Regalia extends Script implements PaintListener {
 			selectedMouldID = ringMouldID;
 			selectedJeweleryXP = goldRingXP;
 			selectedChildInterfaceID = craftFurnaceGoldRingChildInterfaceID;
+		} else if(args.get("jewelery").equalsIgnoreCase("amulet")) {
+		   selectedJeweleryID = goldAmuletID;
+			selectedMouldID = amuletMouldID;
+			selectedJeweleryXP = goldAmuletXP;
+			selectedChildInterfaceID = craftFurnaceGoldAmuletChildInterfaceID;
 		} else {
 			selectedJeweleryID = goldBraceletID;
 			selectedMouldID = braceletMouldID;
